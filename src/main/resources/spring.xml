@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:jms="http://www.springframework.org/schema/jms"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/context
+       http://www.springframework.org/schema/context/spring-context.xsd
+        http://www.springframework.org/schema/jms
+       http://www.springframework.org/schema/jms/spring-jms.xsd
+
+    ">
+    <context:component-scan base-package="demo"/>
+    <!--产生连接的直接工厂，不同厂商不同-->
+    <bean id="targetConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
+        <property name="brokerURL" value="tcp://192.168.1.102:61616"/>
+        <property name="password" value="admin"/>
+        <property name="userName" value="admin"/>
+    </bean>
+    <!--通过包装一下成为池化连接工厂，减少开销,需要commons-pool2依赖-->
+    <bean id="pooledConnectionFactory" class="org.apache.activemq.pool.PooledConnectionFactory">
+        <property name="connectionFactory" ref="targetConnectionFactory"/>
+        <property name="maxConnections" value="10"/>
+    </bean>
+    <!--带缓存的mq连接工厂-->
+    <bean id="cachingConnectionFactory" class="org.springframework.jms.connection.CachingConnectionFactory">
+        <property name="targetConnectionFactory" ref="pooledConnectionFactory"/>
+    </bean>
+    <!--jmsTemplate的send发送消息很方便-->
+    <bean id="jmsTemplate" class="org.springframework.jms.core.JmsTemplate">
+        <property name="connectionFactory" ref="pooledConnectionFactory"/>
+    </bean>
+    <!--注册队列目的地-->
+    <bean id="queue" class="org.apache.activemq.command.ActiveMQQueue">
+        <constructor-arg name="name" value="test-queue-spring"/>
+    </bean>
+    <!--注册主题目的地-->
+    <bean id="topic" class="org.apache.activemq.command.ActiveMQTopic">
+        <constructor-arg name="name" value="test-topic-spring"/>
+    </bean>
+    <!--监听器，实现了messageListener接口-->
+    <bean id="queueListener" class="demo.QueueListener"/>
+    <bean id="topic1" class="demo.TopicListener"/>
+    <bean id="topic2" class="demo.TopicListener2"/>
+    <!--队列监听容器-->
+    <jms:listener-container acknowledge="auto" connection-factory="pooledConnectionFactory" destination-type="queue" container-type="default">
+        <!--注册监听-->
+        <jms:listener destination="test-queue-spring" ref="queueListener"/>
+    </jms:listener-container>
+    <!--发布订阅监听器容器-->
+    <jms:listener-container acknowledge="auto" connection-factory="cachingConnectionFactory" destination-type="topic" container-type="default">
+        <jms:listener destination="test-topic-spring" ref="topic1"/>
+        <jms:listener destination="test-topic-spring" ref="topic2"/>
+    </jms:listener-container>
+    <!--下面的方法不用jms标签接收有问题，建议用上面的方法-->
+    <!--<bean id="messageListenerContainer" class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+        <property name="connectionFactory" ref="cachingConnectionFactory"/>
+        <property name="destinationName" value="queue"/>
+        <property name="messageListener" ref="queueListener"/>
+    </bean>
+    <bean id="messageListenerContainer-topic2" class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+        <property name="connectionFactory" ref="cachingConnectionFactory"/>
+        <property name="destinationName" value="topic"/>
+        <property name="messageListener" ref="topic2"/>
+    </bean>
+    <bean id="messageListenerContainer-topic1" class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+        <property name="connectionFactory" ref="cachingConnectionFactory"/>
+        <property name="destinationName" value="topic"/>
+        <property name="messageListener" ref="topic1"/>
+    </bean>-->
+</beans>
